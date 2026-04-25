@@ -123,6 +123,13 @@ service cloud.firestore {
         allow create, update: if isAuth() && hasAnyRole(['admin', 'director_general', 'jefe_depto', 'tecnico_estudio', 'gestor']);
         allow delete: if isPrivileged();
       }
+
+      // ===== TAREAS (Kanban Trello/Monday) =====
+      match /tareas/{tareaId} {
+        allow read: if isAuth();
+        allow create, update: if isAuth() && hasAnyRole(['admin', 'director_general', 'jefe_depto', 'tecnico_estudio', 'gestor', 'jefe_obra', 'encargado', 'direccion']);
+        allow delete: if isAuth() && hasAnyRole(['admin', 'director_general', 'jefe_depto', 'gestor', 'jefe_obra']);
+      }
     }
 
     // ===== ESTUDIOS (Licitaciones) =====

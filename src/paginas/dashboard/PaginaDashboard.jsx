@@ -1,202 +1,486 @@
-// ===== Dashboard — Hub Central estilo Claude/Notion =====
-import { useState, useEffect, useMemo } from 'react'
+// ===== Dashboard Premium — Glassmorphism Construction OS =====
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import {
-  FolderKanban, Clock, CheckCircle, Plus, ArrowRight,
-  DollarSign, Search, FileText, CalendarDays, Layers,
-  Ruler, FileCheck2, Building2, StickyNote, Trash2,
-  ChevronRight, BarChart3, TrendingUp, AlertTriangle,
-  Briefcase, ExternalLink, Sparkles,
+  FolderKanban, Plus, ArrowRight, Sparkles, TrendingUp,
+  CheckCircle2, AlertTriangle, Activity, Zap, ChevronRight,
+  Building2, Wallet, Hammer, Calendar as CalIcon, Layers,
+  Search, ListChecks, Flame,
 } from 'lucide-react'
 import { useAuth } from '../../contextos/ContextoAutenticacion'
 import { escucharProyectos } from '../../servicios/proyectos'
-import Tarjeta, { TarjetaCuerpo } from '../../componentes/ui/Tarjeta'
-import Boton from '../../componentes/ui/Boton'
+import KPICard from '../../componentes/ui/KPICard'
+import GlassCard from '../../componentes/ui/GlassCard'
 import Cargando from '../../componentes/ui/Cargando'
-import toast from 'react-hot-toast'
-
-function IconoGantt({ className }) {
-  return <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><rect x="3" y="4" width="14" height="3" rx="1" /><rect x="7" y="10.5" width="10" height="3" rx="1" /><rect x="5" y="17" width="16" height="3" rx="1" /></svg>
-}
 
 const MONEDA_SYM = { CLP: '$', EUR: '€', USD: '$', CAD: 'C$' }
-const MONEDA_FLAG = { CLP: '🇨🇱', EUR: '🇪🇺', USD: '🇺🇸', CAD: '🇨🇦' }
+
+function formatMoney(n, moneda = 'CLP') {
+  if (!n || isNaN(n)) return '—'
+  const sym = MONEDA_SYM[moneda] || '$'
+  if (n >= 1e9) return `${sym}${(n / 1e9).toFixed(2)}B`
+  if (n >= 1e6) return `${sym}${(n / 1e6).toFixed(1)}M`
+  if (n >= 1e3) return `${sym}${(n / 1e3).toFixed(0)}K`
+  return `${sym}${n.toFixed(0)}`
+}
+
+function timeAgo(date) {
+  if (!date) return '—'
+  const d = date?.toDate?.() || new Date(date)
+  const diff = (Date.now() - d.getTime()) / 1000
+  if (diff < 60) return 'ahora'
+  if (diff < 3600) return `hace ${Math.floor(diff / 60)}m`
+  if (diff < 86400) return `hace ${Math.floor(diff / 3600)}h`
+  if (diff < 86400 * 7) return `hace ${Math.floor(diff / 86400)}d`
+  return d.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })
+}
+
+const ESTADO_CFG = {
+  activo: { label: 'Activo', bg: 'bg-emerald-500/15', text: 'text-emerald-300', dot: 'bg-emerald-400' },
+  estudio: { label: 'En Estudio', bg: 'bg-cyan-500/15', text: 'text-cyan-300', dot: 'bg-cyan-400' },
+  ejecucion: { label: 'En Obra', bg: 'bg-violet-500/15', text: 'text-violet-300', dot: 'bg-violet-400' },
+  certificacion: { label: 'Certificación', bg: 'bg-amber-500/15', text: 'text-amber-300', dot: 'bg-amber-400' },
+  completado: { label: 'Completado', bg: 'bg-slate-500/15', text: 'text-slate-300', dot: 'bg-slate-400' },
+}
 
 export default function PaginaDashboard() {
   const { usuario, datosUsuario, esAdmin } = useAuth()
   const navegar = useNavigate()
   const [proyectos, setProyectos] = useState([])
   const [cargando, setCargando] = useState(true)
-  const [notas, setNotas] = useState(() => { try { return JSON.parse(localStorage.getItem('dom_notas') || '[]') } catch { return [] } })
-  const [nuevaNota, setNuevaNota] = useState('')
+
   const hoy = new Date()
-  const saludo = hoy.getHours() < 12 ? 'Buenos días' : hoy.getHours() < 19 ? 'Buenas tardes' : 'Buenas noches'
+  const horas = hoy.getHours()
+  const saludo = horas < 12 ? 'Buenos días' : horas < 19 ? 'Buenas tardes' : 'Buenas noches'
 
   useEffect(() => {
     if (!usuario) return
-    return escucharProyectos(usuario.uid, esAdmin, d => { setProyectos(d); setCargando(false) })
+    return escucharProyectos(usuario.uid, esAdmin, (d) => {
+      setProyectos(d)
+      setCargando(false)
+    })
   }, [usuario, esAdmin])
 
   const stats = useMemo(() => {
-    const total = proyectos.length, conPres = proyectos.filter(p => p.tienePresupuesto).length
-    return { total, conPres, activos: proyectos.filter(p => p.estado === 'activo').length, sinPres: total - conPres }
+    const total = proyectos.length
+    const conPres = proyectos.filter((p) => p.tienePresupuesto).length
+    const activos = proyectos.filter((p) => p.estado === 'activo' || p.estado === 'ejecucion').length
+    const enEstudio = proyectos.filter((p) => p.estado === 'estudio').length
+    const completados = proyectos.filter((p) => p.estado === 'completado').length
+    const sinPres = total - conPres
+
+    const totalPresup = proyectos.reduce((acc, p) => {
+      const v = p.presupuestoResumen?.presupuestoTotal || 0
+      return acc + v
+    }, 0)
+
+    // crecimiento últimos 7 días
+    const ahora = Date.now()
+    const sieteDias = ahora - 7 * 24 * 3600 * 1000
+    const recientes = proyectos.filter((p) => {
+      const f = p.fechaCreacion?.toMillis?.() || 0
+      return f > sieteDias
+    }).length
+
+    // sparkline (proyectos por semana, últimas 8 semanas)
+    const semanas = Array(8).fill(0)
+    proyectos.forEach((p) => {
+      const f = p.fechaCreacion?.toMillis?.() || 0
+      const sem = Math.floor((ahora - f) / (7 * 24 * 3600 * 1000))
+      if (sem >= 0 && sem < 8) semanas[7 - sem]++
+    })
+
+    return { total, conPres, activos, enEstudio, completados, sinPres, totalPresup, recientes, semanas }
   }, [proyectos])
 
-  function guardarNota() {
-    if (!nuevaNota.trim()) return
-    const updated = [{ id: Date.now(), texto: nuevaNota.trim(), fecha: new Date().toISOString() }, ...notas].slice(0, 20)
-    setNotas(updated); localStorage.setItem('dom_notas', JSON.stringify(updated)); setNuevaNota('')
-  }
-  function borrarNota(id) { const u = notas.filter(n => n.id !== id); setNotas(u); localStorage.setItem('dom_notas', JSON.stringify(u)) }
+  const kanbanLite = useMemo(() => {
+    const cols = {
+      estudio: [],
+      activo: [],
+      ejecucion: [],
+      certificacion: [],
+      completado: [],
+    }
+    proyectos.forEach((p) => {
+      const e = p.estado || 'activo'
+      ;(cols[e] || cols.activo).push(p)
+    })
+    return cols
+  }, [proyectos])
 
-  if (cargando) return <Cargando texto="Cargando dashboard..." />
+  if (cargando) return <Cargando texto="Cargando workspace..." />
 
   return (
-    <div className="space-y-8 max-w-6xl">
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900 tracking-tight">{saludo}, {datosUsuario?.nombre?.split(' ')[0] || 'Usuario'}</h1>
-        <p className="text-sm text-gray-400 mt-1">{hoy.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })} · {stats.total} proyectos</p>
-      </div>
+    <div className="space-y-7">
+      {/* ===== HERO ===== */}
+      <section className="flex items-end justify-between gap-6 flex-wrap">
+        <div className="space-y-1.5">
+          <p className="text-[12px] uppercase tracking-[0.18em] text-white/40 font-medium">
+            {hoy.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })}
+          </p>
+          <h1 className="text-[34px] sm:text-[40px] font-bold leading-[1.05] tracking-tight">
+            <span className="text-gradient">{saludo}, {datosUsuario?.nombre?.split(' ')[0] || 'Equipo'}.</span>
+          </h1>
+          <p className="text-[14px] text-white/55 max-w-xl leading-relaxed">
+            {stats.total > 0
+              ? <>Tienes <strong className="text-white/85">{stats.activos} {stats.activos === 1 ? 'obra activa' : 'obras activas'}</strong>{stats.enEstudio > 0 && <> y <strong className="text-white/85">{stats.enEstudio}</strong> en estudio</>}. Vamos al control de obra.</>
+              : <>Comienza creando tu primer proyecto. C-MIDE te acompaña desde el estudio hasta la certificación.</>
+            }
+          </p>
+        </div>
 
-      {/* QUICK STATS */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <StatCard label="Proyectos" value={stats.total} icon={FolderKanban} color="dom" onClick={() => navegar('/proyectos')} />
-        <StatCard label="Con presupuesto" value={stats.conPres} icon={Layers} color="emerald" onClick={() => navegar('/planificacion')} />
-        <StatCard label="Activos" value={stats.activos} icon={TrendingUp} color="blue" />
-        <StatCard label="Sin BC3" value={stats.sinPres} icon={AlertTriangle} color={stats.sinPres > 0 ? 'amber' : 'gray'} />
-      </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => navegar('/proyectos')}
+            className="btn-ghost flex items-center gap-1.5 text-[12.5px]"
+          >
+            <Search className="h-3.5 w-3.5" /> Explorar
+          </button>
+          <button
+            onClick={() => navegar('/proyectos/nuevo')}
+            className="btn-primary flex items-center gap-1.5 text-[12.5px]"
+          >
+            <Plus className="h-3.5 w-3.5" /> Nuevo proyecto
+          </button>
+        </div>
+      </section>
 
-      {/* SECTION 1: PERMISOS Y PRESUPUESTOS */}
-      <Section titulo="Permisos y Presupuestos" icono={FolderKanban} desc="Proyectos y estado financiero">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <Tarjeta>
-            <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
-              <h3 className="text-[13px] font-semibold text-gray-800">Proyectos recientes</h3>
-              <Link to="/proyectos/nuevo" className="text-[11px] text-dom-600 hover:text-dom-700 font-medium flex items-center gap-1"><Plus className="h-3 w-3" />Nuevo</Link>
+      {/* ===== KPIs ===== */}
+      <section className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
+        <KPICard
+          label="Proyectos totales"
+          value={stats.total}
+          icon={FolderKanban}
+          variant="violet"
+          hint={stats.recientes > 0 ? `+${stats.recientes} esta semana` : 'Sin nuevos'}
+          onClick={() => navegar('/proyectos')}
+          sparkline={stats.semanas.map((v, i) => v + i * 0.4)}
+        />
+        <KPICard
+          label="En ejecución"
+          value={stats.activos}
+          icon={Hammer}
+          variant="pink"
+          hint={`${stats.total > 0 ? Math.round((stats.activos / stats.total) * 100) : 0}% del portfolio`}
+          onClick={() => navegar('/proyectos')}
+        />
+        <KPICard
+          label="Presupuestado"
+          value={formatMoney(stats.totalPresup)}
+          icon={Wallet}
+          variant="cyan"
+          hint={`${stats.conPres} proyectos con BC3`}
+          onClick={() => navegar('/planificacion')}
+        />
+        <KPICard
+          label="Sin BC3"
+          value={stats.sinPres}
+          icon={AlertTriangle}
+          variant={stats.sinPres > 0 ? 'amber' : 'emerald'}
+          hint={stats.sinPres > 0 ? 'Subir presupuesto' : 'Todo cubierto'}
+          onClick={() => navegar('/planificacion')}
+        />
+      </section>
+
+      {/* ===== LIVE BOARD + ACTIVITY ===== */}
+      <section className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+        {/* Mini Kanban Live */}
+        <GlassCard className="xl:col-span-2 p-0 overflow-hidden">
+          <div className="flex items-center justify-between px-5 py-3.5 border-b border-white/[0.06]">
+            <div className="flex items-center gap-2">
+              <div className="h-7 w-7 rounded-lg bg-gradient-to-br from-violet-500/30 to-pink-500/30 flex items-center justify-center">
+                <Activity className="h-3.5 w-3.5 text-violet-300" />
+              </div>
+              <div>
+                <h3 className="text-[14px] font-semibold text-white">Pipeline de obras</h3>
+                <p className="text-[10.5px] text-white/40">Vista resumen — abre Kanban para gestionar</p>
+              </div>
             </div>
-            {proyectos.length === 0 ? (
-              <div className="px-4 py-10 text-center"><Sparkles className="h-8 w-8 text-gray-200 mx-auto mb-3" /><p className="text-sm text-gray-400 mb-3">Sin proyectos</p><Boton tamano="xs" icono={Plus} onClick={() => navegar('/proyectos/nuevo')}>Crear</Boton></div>
-            ) : (
-              <div className="divide-y divide-gray-50 max-h-[320px] overflow-y-auto">
-                {proyectos.slice(0, 8).map(p => (
-                  <Link key={p.id} to={`/proyectos/${p.id}`} className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50/60 transition-colors group">
-                    <div className={`h-8 w-8 rounded-lg flex items-center justify-center flex-shrink-0 ${p.tienePresupuesto ? 'bg-emerald-50' : 'bg-gray-100'}`}>
-                      {p.tienePresupuesto ? <CheckCircle className="h-4 w-4 text-emerald-600" /> : <FolderKanban className="h-4 w-4 text-gray-400" />}
+            <Link
+              to="/proyectos"
+              className="text-[11.5px] text-violet-300 hover:text-violet-200 font-medium flex items-center gap-1"
+            >
+              Ver Kanban completo <ArrowRight className="h-3 w-3" />
+            </Link>
+          </div>
+
+          <div className="p-4 grid grid-cols-2 md:grid-cols-5 gap-2.5">
+            {Object.entries(ESTADO_CFG).map(([key, cfg]) => {
+              const items = kanbanLite[key] || []
+              return (
+                <div key={key} className="glass-soft rounded-xl p-2.5 min-h-[160px] flex flex-col">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-1.5">
+                      <span className={`h-1.5 w-1.5 rounded-full ${cfg.dot}`} />
+                      <span className="text-[10.5px] font-semibold uppercase tracking-wider text-white/65">
+                        {cfg.label}
+                      </span>
+                    </div>
+                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${cfg.bg} ${cfg.text}`}>
+                      {items.length}
+                    </span>
+                  </div>
+                  <div className="space-y-1.5 flex-1">
+                    {items.slice(0, 3).map((p) => (
+                      <Link
+                        key={p.id}
+                        to={`/proyectos/${p.id}`}
+                        className="block kanban-card group"
+                      >
+                        <p className="text-[11.5px] text-white/85 font-medium truncate leading-tight">
+                          {p.nombre}
+                        </p>
+                        <p className="text-[9.5px] font-mono text-white/40 mt-0.5 truncate">
+                          {p.numeroCaso}
+                        </p>
+                      </Link>
+                    ))}
+                    {items.length === 0 && (
+                      <p className="text-[10.5px] text-white/25 text-center py-4">vacío</p>
+                    )}
+                    {items.length > 3 && (
+                      <p className="text-[10px] text-white/40 text-center pt-1">
+                        +{items.length - 3} más
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </GlassCard>
+
+        {/* Quick Actions */}
+        <GlassCard className="p-0 overflow-hidden">
+          <div className="px-5 py-3.5 border-b border-white/[0.06]">
+            <div className="flex items-center gap-2">
+              <div className="h-7 w-7 rounded-lg bg-gradient-to-br from-amber-500/25 to-pink-500/25 flex items-center justify-center">
+                <Zap className="h-3.5 w-3.5 text-amber-300" />
+              </div>
+              <div>
+                <h3 className="text-[14px] font-semibold text-white">Accesos rápidos</h3>
+                <p className="text-[10.5px] text-white/40">Lo que más vas a usar</p>
+              </div>
+            </div>
+          </div>
+          <div className="p-3 space-y-2">
+            <QuickAction icon={Plus} label="Crear proyecto nuevo" hint="Carga datos y BC3" to="/proyectos/nuevo" variant="violet" />
+            <QuickAction icon={Layers} label="Planificación BC3" hint={`${stats.conPres} proyectos`} to="/planificacion" variant="cyan" />
+            <QuickAction icon={CalIcon} label="Calendario semanal" hint="Google Calendar" to="/calendario" variant="pink" />
+            <QuickAction icon={CheckCircle2} label="Certificaciones" hint="Workflow Origen-Anterior-Actual" to="/certificaciones" variant="emerald" />
+            <QuickAction icon={ListChecks} label="Mediciones" hint="Avance por partida" to="/mediciones" variant="amber" />
+          </div>
+        </GlassCard>
+      </section>
+
+      {/* ===== PROYECTOS RECIENTES + INSIGHTS ===== */}
+      <section className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+        <GlassCard className="xl:col-span-2 p-0 overflow-hidden">
+          <div className="flex items-center justify-between px-5 py-3.5 border-b border-white/[0.06]">
+            <div className="flex items-center gap-2">
+              <div className="h-7 w-7 rounded-lg bg-gradient-to-br from-violet-500/30 to-cyan-500/30 flex items-center justify-center">
+                <Building2 className="h-3.5 w-3.5 text-violet-300" />
+              </div>
+              <div>
+                <h3 className="text-[14px] font-semibold text-white">Proyectos recientes</h3>
+                <p className="text-[10.5px] text-white/40">Los últimos {Math.min(proyectos.length, 8)}</p>
+              </div>
+            </div>
+            <Link
+              to="/proyectos"
+              className="text-[11.5px] text-white/55 hover:text-white font-medium flex items-center gap-1"
+            >
+              Ver todos <ArrowRight className="h-3 w-3" />
+            </Link>
+          </div>
+
+          {proyectos.length === 0 ? (
+            <EmptyProyectos onCreate={() => navegar('/proyectos/nuevo')} />
+          ) : (
+            <div className="divide-y divide-white/[0.04] max-h-[440px] overflow-y-auto">
+              {proyectos.slice(0, 8).map((p) => {
+                const cfg = ESTADO_CFG[p.estado] || ESTADO_CFG.activo
+                const total = p.presupuestoResumen?.presupuestoTotal || 0
+                return (
+                  <Link
+                    key={p.id}
+                    to={`/proyectos/${p.id}`}
+                    className="group flex items-center gap-3.5 px-5 py-3 hover:bg-white/[0.04] transition-colors"
+                  >
+                    <div className={`h-9 w-9 rounded-xl ${cfg.bg} border border-white/[0.05] flex items-center justify-center flex-shrink-0`}>
+                      <Building2 className={`h-4 w-4 ${cfg.text}`} />
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
-                        <span className="text-[10px] font-mono text-dom-600 bg-dom-50 px-1.5 py-0.5 rounded">{p.numeroCaso}</span>
-                        {p.moneda && <span className="text-[9px] text-gray-400">{MONEDA_FLAG[p.moneda]} {p.moneda}</span>}
+                        <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-white/[0.06] text-white/55">
+                          {p.numeroCaso}
+                        </span>
+                        <span className={`text-[9.5px] font-semibold uppercase tracking-wider ${cfg.text}`}>
+                          {cfg.label}
+                        </span>
                       </div>
-                      <p className="text-[13px] text-gray-800 font-medium truncate mt-0.5">{p.nombre}</p>
+                      <p className="text-[13px] text-white/90 font-medium truncate mt-0.5">{p.nombre}</p>
+                      <p className="text-[10.5px] text-white/40 mt-0.5 truncate">
+                        {p.comuna || p.direccion || '—'} · {timeAgo(p.fechaActualizacion || p.fechaCreacion)}
+                      </p>
                     </div>
-                    <ChevronRight className="h-3.5 w-3.5 text-gray-300 group-hover:text-gray-500" />
+                    <div className="hidden sm:block text-right">
+                      <p className="text-[12.5px] font-bold text-white/85">
+                        {p.tienePresupuesto ? formatMoney(total, p.moneda) : '—'}
+                      </p>
+                      <p className="text-[10px] text-white/35">
+                        {p.presupuestoResumen?.totalPartidas || 0} partidas
+                      </p>
+                    </div>
+                    <ChevronRight className="h-4 w-4 text-white/25 group-hover:text-white/70 group-hover:translate-x-0.5 transition-all" />
                   </Link>
-                ))}
-              </div>
-            )}
-          </Tarjeta>
-          <Tarjeta>
-            <div className="px-4 py-3 border-b border-gray-100"><h3 className="text-[13px] font-semibold text-gray-800">Resumen presupuestario</h3></div>
-            <TarjetaCuerpo>
-              {proyectos.filter(p => p.tienePresupuesto).length === 0 ? (
-                <div className="py-8 text-center"><DollarSign className="h-8 w-8 text-gray-200 mx-auto mb-2" /><p className="text-sm text-gray-400">Carga un BC3 en Planificación</p></div>
-              ) : (
-                <div className="space-y-3">
-                  {proyectos.filter(p => p.tienePresupuesto).map(p => {
-                    const sym = MONEDA_SYM[p.moneda || p.presupuestoMoneda] || '$'
-                    const t = p.presupuestoResumen?.presupuestoTotal || 0
-                    return (
-                      <div key={p.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                        <div className="min-w-0 flex-1"><p className="text-[12px] font-medium text-gray-800 truncate">{p.nombre}</p><p className="text-[10px] text-gray-400">{p.presupuestoResumen?.totalPartidas || 0} partidas</p></div>
-                        <div className="text-right ml-3"><p className="text-[13px] font-bold text-gray-900">{sym}{t > 0 ? (t / 1e6).toFixed(1) + 'M' : '—'}</p><p className="text-[9px] text-gray-400">{p.moneda || 'CLP'}</p></div>
-                      </div>
-                    )
-                  })}
-                </div>
-              )}
-            </TarjetaCuerpo>
-          </Tarjeta>
-        </div>
-      </Section>
-
-      {/* SECTION 2: GESTIÓN Y ORGANIZACIÓN */}
-      <Section titulo="Gestión y Organización" icono={CalendarDays} desc="Calendario, agenda y notas rápidas">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <Tarjeta className="lg:col-span-1">
-            <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
-              <h3 className="text-[13px] font-semibold text-gray-800">Calendario</h3>
-              <Link to="/calendario" className="text-[11px] text-dom-600 font-medium flex items-center gap-1">Abrir<ArrowRight className="h-3 w-3" /></Link>
+                )
+              })}
             </div>
-            <TarjetaCuerpo>
-              <MiniCalendar />
-              <Link to="/calendario" className="mt-3 flex items-center justify-center gap-2 p-2.5 bg-dom-50 text-dom-700 rounded-lg text-[12px] font-medium hover:bg-dom-100 transition-colors"><CalendarDays className="h-3.5 w-3.5" />Google Calendar</Link>
-            </TarjetaCuerpo>
-          </Tarjeta>
-          <Tarjeta className="lg:col-span-2">
-            <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
-              <h3 className="text-[13px] font-semibold text-gray-800">Notas rápidas</h3>
-              <StickyNote className="h-3.5 w-3.5 text-gray-300" />
-            </div>
-            <TarjetaCuerpo>
-              <div className="flex gap-2 mb-3">
-                <input type="text" placeholder="Escribe una nota..." value={nuevaNota} onChange={e => setNuevaNota(e.target.value)} onKeyDown={e => e.key === 'Enter' && guardarNota()}
-                  className="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-sm placeholder-gray-400 focus:border-dom-500 focus:outline-none focus:ring-1 focus:ring-dom-500/30" />
-                <Boton tamano="sm" icono={Plus} onClick={guardarNota} disabled={!nuevaNota.trim()}>Añadir</Boton>
-              </div>
-              <div className="space-y-1.5 max-h-[200px] overflow-y-auto">
-                {notas.length === 0 ? <p className="text-center text-sm text-gray-400 py-6">Sin notas.</p> : notas.map(n => (
-                  <div key={n.id} className="group flex items-start gap-2 p-2.5 rounded-lg bg-gray-50 hover:bg-gray-100/80 transition-colors">
-                    <StickyNote className="h-3.5 w-3.5 text-amber-400 mt-0.5 flex-shrink-0" />
-                    <div className="flex-1 min-w-0"><p className="text-[12px] text-gray-700">{n.texto}</p><p className="text-[10px] text-gray-400 mt-0.5">{new Date(n.fecha).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</p></div>
-                    <button onClick={() => borrarNota(n.id)} className="opacity-0 group-hover:opacity-100 p-1 rounded text-gray-400 hover:text-red-500 hover:bg-red-50 transition-all"><Trash2 className="h-3 w-3" /></button>
-                  </div>
-                ))}
-              </div>
-            </TarjetaCuerpo>
-          </Tarjeta>
-        </div>
-      </Section>
+          )}
+        </GlassCard>
 
-      {/* SECTION 3: CONTROL DE OBRA */}
-      <Section titulo="Control de Obra" icono={IconoGantt} desc="Planificación BC3, mediciones y certificaciones">
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          {[
-            ['Planificación BC3', 'Presupuestos, partidas, APU y Gantt', IconoGantt, 'dom', '/planificacion', `${stats.conPres} proy.`],
-            ['Mediciones', 'Registro de avance por partida', Ruler, 'emerald', '/mediciones', stats.conPres > 0 ? 'Activo' : 'Sin BC3'],
-            ['Certificaciones', 'Origen-Anterior-Actual + Bloqueo', FileCheck2, 'purple', '/certificaciones', 'Workflow'],
-          ].map(([t, d, I, c, r, b]) => {
-            const ic = { dom: 'bg-dom-100 text-dom-600', emerald: 'bg-emerald-100 text-emerald-600', purple: 'bg-purple-100 text-purple-600' }
-            const hc = { dom: 'hover:border-dom-300 hover:bg-dom-50/30', emerald: 'hover:border-emerald-300 hover:bg-emerald-50/30', purple: 'hover:border-purple-300 hover:bg-purple-50/30' }
-            return (
-              <Link key={r} to={r} className={`group block p-5 bg-white rounded-xl border border-gray-200 transition-all ${hc[c]} hover:shadow-sm`}>
-                <div className="flex items-center justify-between mb-3">
-                  <div className={`h-9 w-9 rounded-lg flex items-center justify-center ${ic[c]}`}><I className="h-4 w-4" /></div>
-                  <span className="text-[10px] font-medium text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">{b}</span>
-                </div>
-                <h3 className="text-[14px] font-semibold text-gray-900 mb-1">{t}</h3>
-                <p className="text-[12px] text-gray-400">{d}</p>
-              </Link>
-            )
-          })}
+        {/* Insights */}
+        <div className="space-y-4">
+          <GlassCard className="p-5">
+            <div className="flex items-center gap-2 mb-4">
+              <div className="h-7 w-7 rounded-lg bg-gradient-to-br from-emerald-500/25 to-cyan-500/25 flex items-center justify-center">
+                <TrendingUp className="h-3.5 w-3.5 text-emerald-300" />
+              </div>
+              <h3 className="text-[14px] font-semibold text-white">Salud del portfolio</h3>
+            </div>
+            <PortfolioBar
+              total={stats.total}
+              activos={stats.activos}
+              estudio={stats.enEstudio}
+              completados={stats.completados}
+            />
+            <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+              <Mini label="Activos" value={stats.activos} dotClass="bg-violet-400" />
+              <Mini label="Estudio" value={stats.enEstudio} dotClass="bg-cyan-400" />
+              <Mini label="Completos" value={stats.completados} dotClass="bg-emerald-400" />
+            </div>
+          </GlassCard>
+
+          <GlassCard className="p-5 relative overflow-hidden">
+            <div
+              className="absolute -top-12 -right-12 w-40 h-40 rounded-full opacity-30"
+              style={{ background: 'radial-gradient(circle, rgba(255,90,138,.6), transparent 70%)' }}
+            />
+            <div className="relative">
+              <div className="flex items-center gap-2 mb-3">
+                <Flame className="h-4 w-4 text-pink-300" />
+                <span className="text-[10.5px] uppercase tracking-[0.12em] font-semibold text-pink-300">
+                  Sugerencia IA
+                </span>
+              </div>
+              <p className="text-[13px] text-white/85 leading-relaxed">
+                {stats.sinPres > 0
+                  ? <>Tienes <strong className="text-white">{stats.sinPres}</strong> proyecto{stats.sinPres > 1 ? 's' : ''} sin presupuesto BC3 cargado. Sin presupuesto no podrás generar certificaciones.</>
+                  : stats.total === 0
+                    ? <>Crea tu primer proyecto para empezar. Te guiaremos en cada paso del flujo de obra.</>
+                    : <>Buen ritmo. Considera revisar las certificaciones pendientes esta semana.</>
+                }
+              </p>
+              <button
+                onClick={() => navegar(stats.sinPres > 0 ? '/planificacion' : stats.total === 0 ? '/proyectos/nuevo' : '/certificaciones')}
+                className="mt-4 inline-flex items-center gap-1.5 text-[12px] text-pink-300 hover:text-pink-200 font-medium"
+              >
+                <Sparkles className="h-3 w-3" />
+                {stats.sinPres > 0 ? 'Subir BC3' : stats.total === 0 ? 'Crear proyecto' : 'Revisar'}
+                <ArrowRight className="h-3 w-3" />
+              </button>
+            </div>
+          </GlassCard>
         </div>
-      </Section>
+      </section>
     </div>
   )
 }
 
-function Section({ titulo, icono: I, desc, children }) {
-  return (<div><div className="flex items-center gap-2.5 mb-4"><div className="h-7 w-7 rounded-lg bg-gray-100 flex items-center justify-center"><I className="h-3.5 w-3.5 text-gray-500" /></div><div><h2 className="text-[15px] font-semibold text-gray-900">{titulo}</h2><p className="text-[11px] text-gray-400">{desc}</p></div></div>{children}</div>)
+/* ============================================================ */
+/* Sub-components                                               */
+/* ============================================================ */
+
+function QuickAction({ icon: Icon, label, hint, to, variant = 'violet' }) {
+  const grad = {
+    violet: 'from-violet-500 to-violet-700',
+    pink: 'from-pink-500 to-rose-600',
+    cyan: 'from-cyan-400 to-sky-600',
+    emerald: 'from-emerald-500 to-teal-600',
+    amber: 'from-amber-500 to-orange-600',
+  }[variant]
+
+  return (
+    <Link
+      to={to}
+      className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-white/[0.05] transition-colors group"
+    >
+      <div className={`h-9 w-9 rounded-xl bg-gradient-to-br ${grad} flex items-center justify-center shadow-md flex-shrink-0`}>
+        <Icon className="h-4 w-4 text-white" />
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-[12.5px] font-medium text-white/90 truncate">{label}</p>
+        <p className="text-[10.5px] text-white/40 truncate">{hint}</p>
+      </div>
+      <ChevronRight className="h-3.5 w-3.5 text-white/25 group-hover:text-white/70 group-hover:translate-x-0.5 transition-all" />
+    </Link>
+  )
 }
 
-function StatCard({ label, value, icon: I, color, onClick }) {
-  const c = { dom: 'bg-dom-50 text-dom-700 border-dom-200', emerald: 'bg-emerald-50 text-emerald-700 border-emerald-200', blue: 'bg-blue-50 text-blue-700 border-blue-200', amber: 'bg-amber-50 text-amber-700 border-amber-200', gray: 'bg-gray-50 text-gray-500 border-gray-200' }
-  return (<div onClick={onClick} className={`rounded-xl border px-4 py-3 ${c[color]} ${onClick ? 'cursor-pointer hover:shadow-sm transition-shadow' : ''}`}><div className="flex items-center justify-between mb-1"><I className="h-4 w-4 opacity-60" />{onClick && <ArrowRight className="h-3 w-3 opacity-40" />}</div><p className="text-2xl font-bold leading-none">{value}</p><p className="text-[10px] mt-1 opacity-70 uppercase tracking-wider font-medium">{label}</p></div>)
+function PortfolioBar({ total, activos, estudio, completados }) {
+  if (!total) {
+    return (
+      <div className="h-2 w-full rounded-full bg-white/[0.06] overflow-hidden">
+        <div className="h-full w-0" />
+      </div>
+    )
+  }
+  const a = (activos / total) * 100
+  const e = (estudio / total) * 100
+  const c = (completados / total) * 100
+  return (
+    <div className="space-y-2">
+      <div className="h-2 w-full rounded-full bg-white/[0.06] overflow-hidden flex">
+        <div className="h-full bg-gradient-to-r from-violet-400 to-violet-500" style={{ width: `${a}%` }} />
+        <div className="h-full bg-gradient-to-r from-cyan-400 to-cyan-500" style={{ width: `${e}%` }} />
+        <div className="h-full bg-gradient-to-r from-emerald-400 to-emerald-500" style={{ width: `${c}%` }} />
+      </div>
+      <p className="text-[10.5px] text-white/40">
+        {total} proyecto{total !== 1 ? 's' : ''} · distribución por estado
+      </p>
+    </div>
+  )
 }
 
-function MiniCalendar() {
-  const h = new Date(), m = h.getMonth(), a = h.getFullYear()
-  const p = new Date(a, m, 1).getDay(), d = new Date(a, m + 1, 0).getDate()
-  const dias = Array.from({ length: 42 }, (_, i) => { const x = i - (p === 0 ? 6 : p - 1) + 1; return x > 0 && x <= d ? x : null })
-  return (<div><p className="text-[12px] font-semibold text-gray-700 mb-2 text-center">{h.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' })}</p><div className="grid grid-cols-7 gap-0.5 text-center">{['L','M','X','J','V','S','D'].map(d=><div key={d} className="text-[9px] font-medium text-gray-400 py-1">{d}</div>)}{dias.map((x,i)=><div key={i} className={`text-[11px] py-1 rounded-md ${x===h.getDate()?'bg-dom-600 text-white font-bold':x?'text-gray-600 hover:bg-gray-100':''}`}>{x||''}</div>)}</div></div>)
+function Mini({ label, value, dotClass }) {
+  return (
+    <div className="glass-soft rounded-lg py-2 px-1">
+      <div className="flex items-center justify-center gap-1 mb-0.5">
+        <span className={`h-1.5 w-1.5 rounded-full ${dotClass}`} />
+        <span className="text-[14px] font-bold text-white">{value}</span>
+      </div>
+      <p className="text-[9.5px] text-white/45 uppercase tracking-wider">{label}</p>
+    </div>
+  )
+}
+
+function EmptyProyectos({ onCreate }) {
+  return (
+    <div className="px-6 py-14 text-center">
+      <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-violet-500/30 via-pink-500/20 to-cyan-500/30 mx-auto flex items-center justify-center mb-4 shadow-[0_0_40px_-10px_rgba(124,77,255,.6)]">
+        <Sparkles className="h-6 w-6 text-violet-200" />
+      </div>
+      <p className="text-[14px] font-semibold text-white/85 mb-1">Aún no hay proyectos</p>
+      <p className="text-[12px] text-white/45 mb-4 max-w-xs mx-auto">
+        Crea tu primer proyecto y empieza a gestionar tu obra con C-MIDE.
+      </p>
+      <button
+        onClick={onCreate}
+        className="btn-primary inline-flex items-center gap-1.5 text-[12.5px]"
+      >
+        <Plus className="h-3.5 w-3.5" /> Crear primer proyecto
+      </button>
+    </div>
+  )
 }
