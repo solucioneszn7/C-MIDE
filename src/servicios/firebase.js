@@ -3,13 +3,13 @@ import { getAuth, GoogleAuthProvider } from 'firebase/auth'
 import { getFirestore } from 'firebase/firestore'
 
 const firebaseConfig = {
-  apiKey: "AIzaSyCfoQTPAdeChs5xe8uCDwBUasf-DViGj4o",
-  authDomain: "tramitacion-webdom.firebaseapp.com",
-  projectId: "tramitacion-webdom",
-  storageBucket: "tramitacion-webdom.firebasestorage.app",
-  messagingSenderId: "784097657161",
-  appId: "1:784097657161:web:a5cb0bb6d21c5bb8be5a98",
-  measurementId: "G-W82F8HBKEE"
+  apiKey: "AIzaSyDEDM1JGKxheehuwOKeFTu6MfCN8YB66Cg",
+  authDomain: "c-mide.firebaseapp.com",
+  projectId: "c-mide",
+  storageBucket: "c-mide.firebasestorage.app",
+  messagingSenderId: "974633738373",
+  appId: "1:974633738373:web:cd234e28964228cd7d09ec",
+  measurementId: "G-2H127T173V"
 }
 
 const app = initializeApp(firebaseConfig)
