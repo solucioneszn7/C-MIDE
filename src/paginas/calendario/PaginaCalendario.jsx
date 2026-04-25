@@ -108,11 +108,11 @@ export default function PaginaCalendario() {
             <div className="mt-8 text-left max-w-lg mx-auto bg-gray-50 rounded-lg p-4">
               <h3 className="text-xs font-semibold text-gray-600 uppercase tracking-wider mb-3">⚙️ Configuración en Google Cloud Console</h3>
               <ol className="space-y-1.5 text-[12px] text-gray-500 list-decimal list-inside">
-                <li>Abre <strong>console.cloud.google.com</strong> → proyecto <code className="bg-gray-200 px-1 rounded">tramitacion-webdom</code></li>
+                <li>Abre <strong>console.cloud.google.com</strong> → proyecto <code className="bg-gray-200 px-1 rounded">c-mide</code></li>
                 <li>En <strong>APIs & Services → Library</strong> → habilita <strong>Google Calendar API</strong></li>
                 <li>En <strong>Credentials</strong> → tu OAuth 2.0 Client ID</li>
                 <li>Agrega a Authorized JS origins: <code className="bg-gray-200 px-1 rounded">http://localhost:5173</code></li>
-                <li>Agrega a Redirect URIs: <code className="bg-gray-200 px-1 rounded">https://tramitacion-webdom.firebaseapp.com/__/auth/handler</code></li>
+                <li>Agrega a Redirect URIs: <code className="bg-gray-200 px-1 rounded">https://c-mide.firebaseapp.com/__/auth/handler</code></li>
                 <li>En <strong>OAuth consent screen → Scopes</strong> agrega <code className="bg-gray-200 px-1 rounded">calendar.events</code></li>
               </ol>
             </div>
